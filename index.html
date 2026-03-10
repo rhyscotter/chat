@@ -10,6 +10,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chat UI Preview</title>
   <style>
+    :root[data-club="default"]{}
     :root{
       --bg:#050505;
       --panel:rgba(255,255,255,.05);
@@ -158,7 +159,7 @@
           <input id="searchInput" class="search" placeholder="Search chats" />
         </div>
         <div id="threadList" class="thread-list"></div>
-
+        <div class="page-note">This GitHub file is UI only. Wix sends data into it with postMessage.</div>
       </div>
     </section>
 
@@ -206,10 +207,87 @@
     </section>
   </div>
 
- 
+  <div class="dev-note">Save this file as <strong>index.html</strong> in your GitHub repo. If you are seeing <strong>/index.tsx: Unexpected token (1:0)</strong>, you are running this HTML file in a React/TypeScript entrypoint instead of serving it as plain HTML.</div>
 
   <script>
+    const DEFAULT_THEME = {
+      clubSlug: 'default',
+      accent: '#dc2626',
+      accent2: '#ef4444',
+      text: '#ffffff',
+      muted: 'rgba(255,255,255,.62)',
+      panel: 'rgba(255,255,255,.05)',
+      border: 'rgba(255,255,255,.10)',
+      bg: '#050505',
+      glow1: 'rgba(239,68,68,.16)',
+      glow2: 'rgba(239,68,68,.10)'
+    };
+
+    function norm(v){ return String(v == null ? '' : v).trim(); }
+    function normalizeColor(input){
+      const c = norm(input).replace(/[;,]+$/g, '').trim();
+      if (!c) return '';
+      const hex = c.replace('#', '');
+      if (/^[0-9a-fA-F]{6}$/.test(hex)) return '#' + hex.toUpperCase();
+      if (/^rgba?\(/i.test(c)) return c;
+      if (/^[a-zA-Z]+$/.test(c)) return c;
+      return '';
+    }
+    function hexToRgba(hex, alpha){
+      const clean = String(hex || '').replace('#', '').trim();
+      if (!/^[0-9A-Fa-f]{6}$/.test(clean)) return 'rgba(239,68,68,' + alpha + ')';
+      const r = parseInt(clean.slice(0,2), 16);
+      const g = parseInt(clean.slice(2,4), 16);
+      const b = parseInt(clean.slice(4,6), 16);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+    function buildThemePayload(input){
+      const accent = normalizeColor(input && (input.accent || input.primary || input.color || '')) || DEFAULT_THEME.accent;
+      const accent2 = normalizeColor(input && (input.accent2 || input.secondary || '')) || DEFAULT_THEME.accent2;
+      const text = normalizeColor(input && (input.textColor || input.text || '')) || DEFAULT_THEME.text;
+      const muted = normalizeColor(input && (input.muted || '')) || DEFAULT_THEME.muted;
+      const panel = normalizeColor(input && (input.panel || '')) || DEFAULT_THEME.panel;
+      const border = normalizeColor(input && (input.border || '')) || DEFAULT_THEME.border;
+      const bg = normalizeColor(input && (input.bg || input.background || '')) || DEFAULT_THEME.bg;
+      const clubSlug = norm(input && (input.clubSlug || input.slug || '')) || DEFAULT_THEME.clubSlug;
+      return {
+        clubSlug,
+        accent,
+        accent2,
+        text,
+        muted,
+        panel,
+        border,
+        bg,
+        glow1: hexToRgba(accent, 0.16),
+        glow2: hexToRgba(accent2, 0.10)
+      };
+    }
+    function applyTheme(themeInput){
+      const t = buildThemePayload(themeInput || {});
+      document.documentElement.dataset.club = t.clubSlug;
+      const root = document.documentElement.style;
+      root.setProperty('--bg', t.bg);
+      root.setProperty('--panel', t.panel);
+      root.setProperty('--border', t.border);
+      root.setProperty('--text', t.text);
+      root.setProperty('--muted', t.muted);
+      root.setProperty('--red', t.accent);
+      root.setProperty('--red2', t.accent2);
+      root.setProperty('--shadow', '0 14px 40px rgba(0,0,0,.45)');
+      document.body.style.background = [
+        'radial-gradient(circle at 20% 10%, ' + t.glow1 + ', transparent 38%)',
+        'radial-gradient(circle at 80% 40%, rgba(255,255,255,.08), transparent 45%)',
+        'radial-gradient(circle at 30% 90%, ' + t.glow2 + ', transparent 55%)',
+        'linear-gradient(120deg, rgba(255,255,255,.04), transparent 35%, rgba(255,255,255,.03))',
+        t.bg
+      ].join(',');
+      state.theme = t;
+    }
+
+    applyTheme(DEFAULT_THEME);
     const state = {
+      theme: DEFAULT_THEME,
       memberId: '',
       page: 'inbox',
       threads: [
@@ -473,7 +551,13 @@
     window.addEventListener('message', function(event){
       const data = event.data || {};
 
+      if (data.type === 'APPLY_THEME') {
+        applyTheme(data.theme || { clubSlug: data.clubSlug || 'default' });
+        render();
+      }
+
       if (data.type === 'LOAD_INBOX') {
+        if (data.theme || data.clubSlug) applyTheme(data.theme || { clubSlug: data.clubSlug || 'default' });
         state.memberId = data.memberId || '';
         state.threads = (data.chats || []).map(function(chat){
           return {
@@ -490,6 +574,7 @@
       }
 
       if (data.type === 'LOAD_CHAT') {
+        if (data.theme || data.clubSlug) applyTheme(data.theme || { clubSlug: data.clubSlug || 'default' });
         state.memberId = data.memberId || state.memberId;
         const chat = data.chat || null;
         const chatId = (chat && (chat._id || chat.id)) || data.chatId || state.activeId;
@@ -565,6 +650,8 @@
     console.assert(escapeHtml('<script>') === '&lt;script&gt;', 'escapeHtml should escape angle brackets');
     console.assert(timeLabel(new Date()).length > 0, 'timeLabel should return text for valid dates');
     console.assert(Array.isArray(state.threads), 'threads should be an array');
+    console.assert(buildThemePayload({ accent: '#112233' }).accent === '#112233'.toUpperCase(), 'buildThemePayload should normalize accent colors');
+    console.assert(hexToRgba('#112233', 0.5) === 'rgba(17,34,51,0.5)', 'hexToRgba should convert hex to rgba');
 
     render();
   </script>
