@@ -107,6 +107,9 @@
     .reply-line{border-left:4px solid var(--accent2);padding-left:10px}
     .composer-row{display:flex;align-items:center;gap:10px}
     .tip{font-size:11px;color:rgba(255,255,255,.5)}
+    .member-picker{padding:10px;border-radius:16px;max-height:220px;overflow:auto}
+    .member-row{display:flex;align-items:center;gap:12px;padding:10px;border-radius:14px;border:1px solid var(--border);background:rgba(255,255,255,.03);cursor:pointer}
+    .member-row input{accent-color:var(--accent)}
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:1000}
     .modal-backdrop.show{display:flex}
     .modal{width:min(540px,100%);padding:18px}
@@ -146,7 +149,7 @@
           <input id="searchInput" class="search" placeholder="Search chats" />
         </div>
         <div id="threadList" class="thread-list"></div>
-        
+        <div class="page-note">This GitHub file is UI only. Wix sends data into it with postMessage.</div>
       </div>
     </section>
 
@@ -199,14 +202,17 @@
   <div id="newChatModal" class="modal-backdrop">
     <div class="card modal">
       <div class="modal-title impact">NEW CHAT</div>
-      <div class="modal-sub">Create a direct or group chat.</div>
+      <div class="modal-sub">Create a direct or group chat from Wix members.</div>
       <div class="modal-grid">
         <select id="chatTypeSelect" class="modal-select">
           <option value="direct">Direct</option>
           <option value="group">Group</option>
         </select>
         <input id="chatTitleInput" class="modal-input" placeholder="Chat title (for group chats)" />
-        <input id="chatParticipantsInput" class="modal-input" placeholder="Participant member IDs, comma separated" />
+        <div id="memberPicker" class="card member-picker">
+          <div id="memberPickerEmpty" class="tip">No members loaded yet.</div>
+          <div id="memberPickerList" class="thread-list" style="margin-top:0;"></div>
+        </div>
       </div>
       <div class="modal-actions">
         <button id="cancelNewChatBtn" class="icon-btn">Cancel</button>
@@ -215,7 +221,8 @@
     </div>
   </div>
 
- 
+  <div class="dev-note">Save this as <strong>index.html</strong>. Theme is applied from Wix via <strong>theme.accent / theme.accent2 / theme.textColor / theme.border / theme.panel / theme.bg</strong> or the raw club fields <strong>colorPrimary / colorOnDark / colorNeutral</strong>. New chat uses <strong>availableMembers</strong> from Wix, not manual member IDs.</div>
+
   <script>
     const DEFAULT_THEME = {
       clubSlug: 'default',
@@ -232,9 +239,7 @@
       memberId: '',
       page: 'inbox',
       threads: [
-        { id: 't1', name: 'MDS Coaches', role: 'Group', initials: 'MC', online: true },
-        { id: 't2', name: 'Parent - Amy', role: 'Direct', initials: 'PA', online: false },
-        { id: 't3', name: 'Director - Rick', role: 'Direct', initials: 'DR', online: true }
+        { id: 't1', name: 'MDS Coaches', role: 'Group', initials: 'MC', online: true }
       ],
       activeId: 't1',
       messagesByThread: {
@@ -245,7 +250,9 @@
       },
       replyTo: null,
       pendingFile: null,
-      typingUsers: {}
+      typingUsers: {},
+      availableMembers: [],
+      selectedParticipantIds: []
     };
 
     const els = {
@@ -257,7 +264,9 @@
       newChatModal: document.getElementById('newChatModal'),
       chatTypeSelect: document.getElementById('chatTypeSelect'),
       chatTitleInput: document.getElementById('chatTitleInput'),
-      chatParticipantsInput: document.getElementById('chatParticipantsInput'),
+      memberPicker: document.getElementById('memberPicker'),
+      memberPickerEmpty: document.getElementById('memberPickerEmpty'),
+      memberPickerList: document.getElementById('memberPickerList'),
       cancelNewChatBtn: document.getElementById('cancelNewChatBtn'),
       createNewChatBtn: document.getElementById('createNewChatBtn'),
       backBtn: document.getElementById('backBtn'),
@@ -343,6 +352,16 @@
       ].join(',');
     }
 
+    function mapMember(m){
+      const name = m.name || [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'Member';
+      return {
+        id: m._id || m.id,
+        name: name,
+        initials: m.initials || initials(name),
+        role: m.role || ''
+      };
+    }
+
     function renderThreads(){
       const q = (els.searchInput.value || '').trim().toLowerCase();
       const list = !q ? state.threads : state.threads.filter(function(t){ return (t.name || '').toLowerCase().includes(q); });
@@ -367,6 +386,36 @@
           const id = btn.getAttribute('data-id');
           openThread(id);
           postToWix({ type: 'OPEN_CHAT', chatId: id });
+        });
+      });
+    }
+
+    function renderMemberPicker(){
+      const members = (state.availableMembers || []).filter(function(m){ return m && m.id && m.id !== state.memberId; });
+      els.memberPickerEmpty.classList.toggle('hidden', members.length > 0);
+      els.memberPickerList.innerHTML = members.map(function(m){
+        const checked = state.selectedParticipantIds.includes(m.id);
+        return `
+          <label class="member-row">
+            <input type="checkbox" data-member-id="${escapeHtml(m.id)}" ${checked ? 'checked' : ''} />
+            <div class="avatar">${escapeHtml(m.initials || initials(m.name))}</div>
+            <div class="thread-main">
+              <div class="thread-name impact" style="font-size:16px;">${escapeHtml(m.name || 'Member')}</div>
+              <div class="thread-sub">${escapeHtml(m.role || '')}</div>
+            </div>
+          </label>
+        `;
+      }).join('');
+
+      els.memberPickerList.querySelectorAll('input[type="checkbox"]').forEach(function(box){
+        box.addEventListener('change', function(){
+          const id = box.getAttribute('data-member-id');
+          if (!id) return;
+          if (box.checked) {
+            if (!state.selectedParticipantIds.includes(id)) state.selectedParticipantIds.push(id);
+          } else {
+            state.selectedParticipantIds = state.selectedParticipantIds.filter(function(x){ return x !== id; });
+          }
         });
       });
     }
@@ -475,11 +524,12 @@
       renderMessages();
       renderComposerBits();
       renderTypingIndicator();
+      renderMemberPicker();
     }
 
     function openThread(id){ state.activeId = id; state.page = 'chat'; state.replyTo = null; render(); }
     function backToInbox(){ state.page = 'inbox'; state.replyTo = null; render(); }
-    function openNewChatModal(){ els.newChatModal.classList.add('show'); }
+    function openNewChatModal(){ state.selectedParticipantIds = []; els.newChatModal.classList.add('show'); renderMemberPicker(); }
     function closeNewChatModal(){ els.newChatModal.classList.remove('show'); }
 
     function sendTyping(isTyping){
@@ -516,17 +566,15 @@
     function createNewChat(){
       const type = els.chatTypeSelect.value || 'direct';
       const title = norm(els.chatTitleInput.value);
-      const participantIds = norm(els.chatParticipantsInput.value)
-        .split(',')
-        .map(function(x){ return norm(x); })
-        .filter(Boolean);
+      const participantIds = (state.selectedParticipantIds || []).slice();
       postToWix({
         type:'CREATE_CHAT',
         payload:{ type:type, title:title, participantIds:participantIds }
       });
       closeNewChatModal();
       els.chatTitleInput.value = '';
-      els.chatParticipantsInput.value = '';
+      state.selectedParticipantIds = [];
+      renderMemberPicker();
     }
 
     window.addEventListener('message', function(event){
@@ -540,6 +588,7 @@
       if (data.type === 'LOAD_INBOX') {
         applyTheme(data.theme || data.colors || { clubSlug: data.clubSlug || 'default', colorPrimary: data.colorPrimary, colorOnDark: data.colorOnDark, colorNeutral: data.colorNeutral });
         state.memberId = data.memberId || '';
+        state.availableMembers = (data.availableMembers || []).map(mapMember);
         state.threads = (data.chats || []).map(function(chat){
           return {
             id: chat._id || chat.id,
@@ -563,6 +612,9 @@
       if (data.type === 'LOAD_CHAT') {
         applyTheme(data.theme || data.colors || { clubSlug: data.clubSlug || 'default', colorPrimary: data.colorPrimary, colorOnDark: data.colorOnDark, colorNeutral: data.colorNeutral });
         state.memberId = data.memberId || state.memberId;
+        if (Array.isArray(data.availableMembers)) {
+          state.availableMembers = data.availableMembers.map(mapMember);
+        }
         const chat = data.chat || null;
         const chatId = (chat && (chat._id || chat.id)) || data.chatId || state.activeId;
         if (chat) {
@@ -600,6 +652,9 @@
       }
 
       if (data.type === 'CHAT_CREATED') {
+        if (Array.isArray(data.availableMembers)) {
+          state.availableMembers = data.availableMembers.map(mapMember);
+        }
         const newChatId = data.chatId;
         if (newChatId) {
           if (Array.isArray(data.chats)) {
@@ -650,6 +705,7 @@
     console.assert(buildThemePayload({ colorPrimary:'#112233' }).accent === '#112233'.toUpperCase(), 'theme should map club colorPrimary');
     console.assert(buildThemePayload({ colorOnDark:'#F5F5F5' }).textColor === '#F5F5F5', 'theme should map colorOnDark');
     console.assert(buildThemePayload({ colorNeutral:'#222222' }).border === '#222222', 'theme should map colorNeutral');
+    console.assert(Array.isArray(state.selectedParticipantIds), 'selectedParticipantIds should be an array');
 
     applyTheme(DEFAULT_THEME);
     render();
