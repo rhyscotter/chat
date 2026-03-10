@@ -1,8 +1,4 @@
 <!doctype html>
-<!--
-  Save this file as index.html in your GitHub repo.
-  Do not paste it into index.tsx / App.tsx.
--->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -75,6 +71,7 @@
     .thread-sub{font-size:12px;color:var(--muted);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .online{height:8px;width:8px;border-radius:999px;background:var(--accent)}
     .page-note{font-size:11px;color:rgba(255,255,255,.5);margin-top:14px}
+    .empty-state{padding:20px;border:1px dashed var(--border);border-radius:18px;color:var(--muted);text-align:center;margin-top:16px}
     .chat-head{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
     .chat-head-main{min-width:0;flex:1}
     .chat-name{font-size:24px;color:var(--accent2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -117,16 +114,7 @@
     .modal-sub{font-size:12px;color:var(--muted);margin-bottom:14px}
     .modal-grid{display:grid;gap:10px}
     .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
-    .dev-note{max-width:1100px;margin:10px auto 0;padding:0 24px;color:rgba(255,255,255,.55);font-size:12px}
     @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-    @media (max-width: 700px){
-      .app{padding:14px}
-      .title{font-size:28px}
-      .chat-name{font-size:20px}
-      .messages{height:58vh}
-      .bubble{max-width:88%}
-      .topbar-actions{gap:8px}
-    }
   </style>
 </head>
 <body>
@@ -138,8 +126,8 @@
           <div class="subtitle">All previous chats</div>
         </div>
         <div class="topbar-actions">
-          <button id="newChatBtn" class="primary-btn impact" title="New Chat">NEW CHAT</button>
-          <button class="icon-btn" title="Menu">⋯</button>
+          <button id="newChatBtn" class="primary-btn impact">NEW CHAT</button>
+          <button class="icon-btn">⋯</button>
         </div>
       </div>
 
@@ -149,20 +137,20 @@
           <input id="searchInput" class="search" placeholder="Search chats" />
         </div>
         <div id="threadList" class="thread-list"></div>
-       
+        <div id="threadEmpty" class="empty-state hidden">No chats yet.</div>
       </div>
     </section>
 
     <section id="chatPage" class="hidden">
       <div class="card">
         <div class="chat-head">
-          <button id="backBtn" class="back-btn" title="Back">←</button>
+          <button id="backBtn" class="back-btn">←</button>
           <div id="chatAvatar" class="avatar">C</div>
           <div class="chat-head-main">
             <div id="chatName" class="chat-name impact">Chat</div>
             <div id="chatRole" class="chat-role">Offline • Direct</div>
           </div>
-          <button class="icon-btn" title="Menu">⋯</button>
+          <button class="icon-btn">⋯</button>
         </div>
 
         <div id="messages" class="messages"></div>
@@ -174,7 +162,7 @@
             <div class="reply-preview-main reply-line">
               <div id="replyText" class="reply-preview-text">Replying to...</div>
             </div>
-            <button id="cancelReplyBtn" class="icon-btn" title="Cancel reply">✕</button>
+            <button id="cancelReplyBtn" class="icon-btn">✕</button>
           </div>
 
           <div id="pendingFile" class="pending-file hidden">
@@ -183,17 +171,15 @@
               <div id="pendingName" class="pending-file-name">file.pdf</div>
               <div id="pendingSize" class="attach-size">0 KB</div>
             </div>
-            <button id="removeFileBtn" class="icon-btn" title="Remove file">✕</button>
+            <button id="removeFileBtn" class="icon-btn">✕</button>
           </div>
 
           <div class="composer-row">
             <input id="fileInput" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" class="hidden" />
-            <button id="attachBtn" class="attach-btn" title="Attach">📎</button>
+            <button id="attachBtn" class="attach-btn">📎</button>
             <input id="messageInput" class="composer-input" placeholder="Write a message…" />
-            <button id="sendBtn" class="send-btn" title="Send">➤</button>
+            <button id="sendBtn" class="send-btn">➤</button>
           </div>
-
-          <div class="tip">Attach with the paperclip • Enter to send</div>
         </div>
       </div>
     </section>
@@ -221,8 +207,6 @@
     </div>
   </div>
 
- 
-
   <script>
     const DEFAULT_THEME = {
       clubSlug: 'default',
@@ -238,16 +222,9 @@
       theme: DEFAULT_THEME,
       memberId: '',
       page: 'inbox',
-      threads: [
-        { id: 't1', name: 'MDS Coaches', role: 'Group', initials: 'MC', online: true }
-      ],
-      activeId: 't1',
-      messagesByThread: {
-        t1: [
-          { id: uid(), who: 'other', text: 'Nike-dark vibe for the portal? Keep it clean + performance.', ts: new Date() },
-          { id: uid(), who: 'me', text: 'Yep. Minimal, bold + sharp accents. Feels fast.', ts: new Date() }
-        ]
-      },
+      threads: [],
+      activeId: '',
+      messagesByThread: {},
       replyTo: null,
       pendingFile: null,
       typingUsers: {},
@@ -259,12 +236,12 @@
       inboxPage: document.getElementById('inboxPage'),
       chatPage: document.getElementById('chatPage'),
       threadList: document.getElementById('threadList'),
+      threadEmpty: document.getElementById('threadEmpty'),
       searchInput: document.getElementById('searchInput'),
       newChatBtn: document.getElementById('newChatBtn'),
       newChatModal: document.getElementById('newChatModal'),
       chatTypeSelect: document.getElementById('chatTypeSelect'),
       chatTitleInput: document.getElementById('chatTitleInput'),
-      memberPicker: document.getElementById('memberPicker'),
       memberPickerEmpty: document.getElementById('memberPickerEmpty'),
       memberPickerList: document.getElementById('memberPickerList'),
       cancelNewChatBtn: document.getElementById('cancelNewChatBtn'),
@@ -294,11 +271,11 @@
 
     function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
     function norm(v){ return String(v == null ? '' : v).trim(); }
-    function initials(name){ return String(name || 'C').split(' ').map(function(x){ return x[0]; }).slice(0,2).join('').toUpperCase(); }
+    function initials(name){ return String(name || 'C').split(' ').map(x => x[0]).slice(0,2).join('').toUpperCase(); }
     function timeLabel(d){ try { return new Intl.DateTimeFormat(undefined, { hour:'numeric', minute:'2-digit' }).format(new Date(d)); } catch (e) { return ''; } }
     function formatBytes(bytes){ if (!bytes) return '0 B'; const k = 1024; const sizes = ['B','KB','MB','GB']; const i = Math.min(Math.floor(Math.log(bytes)/Math.log(k)), sizes.length - 1); const v = bytes / Math.pow(k, i); return (v >= 10 || i === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + sizes[i]; }
-    function activeThread(){ return state.threads.find(function(t){ return t.id === state.activeId; }) || state.threads[0] || null; }
-    function escapeHtml(str){ return String(str == null ? '' : str).replace(/[&<>"']/g, function(s){ return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[s]; }); }
+    function activeThread(){ return state.threads.find(t => t.id === state.activeId) || null; }
+    function escapeHtml(str){ return String(str == null ? '' : str).replace(/[&<>\"']/g, s => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '\"':'&quot;', "'":'&#39;' }[s])); }
     function escapeAttr(str){ return escapeHtml(str); }
     function postToWix(data){ try { window.parent.postMessage(data, '*'); } catch (e) {} }
 
@@ -340,7 +317,6 @@
       root.setProperty('--panel', t.panel);
       root.setProperty('--border', t.border);
       root.setProperty('--text', t.textColor);
-      root.setProperty('--muted', 'rgba(255,255,255,.62)');
       root.setProperty('--accent', t.accent);
       root.setProperty('--accent2', t.accent2);
       document.body.style.background = [
@@ -356,7 +332,7 @@
       const name = m.name || [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || 'Member';
       return {
         id: m._id || m.id,
-        name: name,
+        name,
         initials: m.initials || initials(name),
         role: m.role || ''
       };
@@ -364,24 +340,25 @@
 
     function renderThreads(){
       const q = (els.searchInput.value || '').trim().toLowerCase();
-      const list = !q ? state.threads : state.threads.filter(function(t){ return (t.name || '').toLowerCase().includes(q); });
-      els.threadList.innerHTML = list.map(function(t){
-        return `
-          <button class="thread ${t.id === state.activeId ? 'active' : ''}" data-id="${escapeHtml(t.id)}">
-            <div class="thread-row">
-              <div class="avatar">${escapeHtml(t.initials || initials(t.name))}</div>
-              <div class="thread-main">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <div class="thread-name impact">${escapeHtml(t.name || 'Untitled Chat')}</div>
-                  ${t.online ? '<span class="online"></span>' : ''}
-                </div>
-                <div class="thread-sub">Tap to open chat</div>
+      const list = !q ? state.threads : state.threads.filter(t => (t.name || '').toLowerCase().includes(q));
+
+      els.threadEmpty.classList.toggle('hidden', list.length > 0);
+      els.threadList.innerHTML = list.map(t => `
+        <button class="thread ${t.id === state.activeId ? 'active' : ''}" data-id="${escapeHtml(t.id)}">
+          <div class="thread-row">
+            <div class="avatar">${escapeHtml(t.initials || initials(t.name))}</div>
+            <div class="thread-main">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div class="thread-name impact">${escapeHtml(t.name || 'Untitled Chat')}</div>
+                ${t.online ? '<span class="online"></span>' : ''}
               </div>
+              <div class="thread-sub">${escapeHtml(t.lastMessage || 'Tap to open chat')}</div>
             </div>
-          </button>
-        `;
-      }).join('');
-      els.threadList.querySelectorAll('.thread').forEach(function(btn){
+          </div>
+        </button>
+      `).join('');
+
+      els.threadList.querySelectorAll('.thread').forEach(btn => {
         btn.addEventListener('click', function(){
           const id = btn.getAttribute('data-id');
           openThread(id);
@@ -391,9 +368,9 @@
     }
 
     function renderMemberPicker(){
-      const members = (state.availableMembers || []).filter(function(m){ return m && m.id && m.id !== state.memberId; });
+      const members = (state.availableMembers || []).filter(m => m && m.id && m.id !== state.memberId);
       els.memberPickerEmpty.classList.toggle('hidden', members.length > 0);
-      els.memberPickerList.innerHTML = members.map(function(m){
+      els.memberPickerList.innerHTML = members.map(m => {
         const checked = state.selectedParticipantIds.includes(m.id);
         return `
           <label class="member-row">
@@ -407,14 +384,14 @@
         `;
       }).join('');
 
-      els.memberPickerList.querySelectorAll('input[type="checkbox"]').forEach(function(box){
+      els.memberPickerList.querySelectorAll('input[type="checkbox"]').forEach(box => {
         box.addEventListener('change', function(){
           const id = box.getAttribute('data-member-id');
           if (!id) return;
           if (box.checked) {
             if (!state.selectedParticipantIds.includes(id)) state.selectedParticipantIds.push(id);
           } else {
-            state.selectedParticipantIds = state.selectedParticipantIds.filter(function(x){ return x !== id; });
+            state.selectedParticipantIds = state.selectedParticipantIds.filter(x => x !== id);
           }
         });
       });
@@ -422,7 +399,7 @@
 
     function renderChatHead(){
       const t = activeThread();
-      els.chatAvatar.textContent = (t && t.initials) || initials(t && t.name);
+      els.chatAvatar.textContent = (t && t.initials) || 'C';
       els.chatName.textContent = (t && t.name) || 'Chat';
       els.chatRole.textContent = ((t && t.online) ? 'Online' : 'Offline') + ' • ' + ((t && t.role) || 'Direct');
     }
@@ -451,16 +428,15 @@
 
     function renderMessages(){
       const messages = state.messagesByThread[state.activeId] || [];
-      els.messages.innerHTML = messages.map(function(msg){
+      els.messages.innerHTML = messages.map(msg => {
         const replyHtml = msg.reply ? `<div class="reply-box">Replying to: ${escapeHtml(msg.reply.text || (msg.reply.file && msg.reply.file.name ? '📎 ' + msg.reply.file.name : ''))}</div>` : '';
         const fileHtml = renderFileHtml(msg.file || null);
         return `
           <div class="row ${msg.who === 'me' ? 'me' : 'other'}">
             <div class="bubble ${msg.who === 'me' ? 'me' : 'other'}" data-id="${escapeHtml(msg.id)}">
               <div class="hover-actions">
-                <button data-action="reply" title="Reply">↩</button>
-                <button data-action="copy" title="Copy">⧉</button>
-                <button data-action="react" title="React">☺</button>
+                <button data-action="reply">↩</button>
+                <button data-action="copy">⧉</button>
               </div>
               ${replyHtml}
               ${fileHtml}
@@ -470,10 +446,11 @@
           </div>
         `;
       }).join('');
-      els.messages.querySelectorAll('.bubble').forEach(function(node){
+
+      els.messages.querySelectorAll('.bubble').forEach(node => {
         const id = node.getAttribute('data-id');
-        const msg = (state.messagesByThread[state.activeId] || []).find(function(m){ return m.id === id; });
-        node.querySelectorAll('[data-action]').forEach(function(btn){
+        const msg = (state.messagesByThread[state.activeId] || []).find(m => m.id === id);
+        node.querySelectorAll('[data-action]').forEach(btn => {
           btn.addEventListener('click', function(e){
             e.stopPropagation();
             const action = btn.getAttribute('data-action');
@@ -481,16 +458,17 @@
               state.replyTo = msg;
               renderComposerBits();
             } else if (action === 'copy') {
-              navigator.clipboard.writeText((msg && msg.text) || (msg && msg.file && msg.file.name) || '');
+              navigator.clipboard.writeText((msg && msg.text) || '');
             }
           });
         });
       });
+
       els.messages.scrollTop = els.messages.scrollHeight;
     }
 
     function renderTypingIndicator(){
-      const activeTypers = Object.keys(state.typingUsers || {}).filter(function(key){ return state.typingUsers[key]; });
+      const activeTypers = Object.keys(state.typingUsers || {}).filter(key => state.typingUsers[key]);
       if (activeTypers.length > 0) {
         els.typingIndicator.textContent = activeTypers.length === 1 ? 'Someone is typing...' : activeTypers.length + ' people are typing...';
         els.typingIndicator.classList.remove('hidden');
@@ -502,10 +480,11 @@
     function renderComposerBits(){
       if (state.replyTo) {
         els.replyPreview.classList.remove('hidden');
-        els.replyText.textContent = 'Replying to: ' + (state.replyTo.text || (state.replyTo.file && state.replyTo.file.name ? '📎 ' + state.replyTo.file.name : ''));
+        els.replyText.textContent = 'Replying to: ' + (state.replyTo.text || '');
       } else {
         els.replyPreview.classList.add('hidden');
       }
+
       if (state.pendingFile) {
         els.pendingFile.classList.remove('hidden');
         els.pendingName.textContent = state.pendingFile.name || 'Attachment';
@@ -542,35 +521,29 @@
     function sendMessage(){
       const text = (els.messageInput.value || '').trim();
       if (!text && !state.pendingFile) return;
-      const msg = { id: uid(), who:'me', text:text, ts:new Date(), reply:state.replyTo, file:state.pendingFile || null };
-      state.messagesByThread[state.activeId] = (state.messagesByThread[state.activeId] || []).concat(msg);
-      els.messageInput.value = '';
-      const payloadFile = state.pendingFile ? Object.assign({}, state.pendingFile) : null;
-      state.pendingFile = null;
-      state.replyTo = null;
-      sendTyping(false);
-      render();
       postToWix({
         type:'SEND_MESSAGE',
         payload:{
           chatId: state.activeId,
-          text:text,
-          fileName:(payloadFile && payloadFile.name) || '',
-          fileUrl:(payloadFile && payloadFile.url) || '',
-          fileType:(payloadFile && payloadFile.type) || '',
-          fileSize:(payloadFile && payloadFile.size) || 0
+          text,
+          fileName:(state.pendingFile && state.pendingFile.name) || '',
+          fileUrl:(state.pendingFile && state.pendingFile.url) || '',
+          fileType:(state.pendingFile && state.pendingFile.type) || '',
+          fileSize:(state.pendingFile && state.pendingFile.size) || 0
         }
       });
+      els.messageInput.value = '';
+      state.pendingFile = null;
+      state.replyTo = null;
+      sendTyping(false);
+      render();
     }
 
     function createNewChat(){
       const type = els.chatTypeSelect.value || 'direct';
       const title = norm(els.chatTitleInput.value);
       const participantIds = (state.selectedParticipantIds || []).slice();
-      postToWix({
-        type:'CREATE_CHAT',
-        payload:{ type:type, title:title, participantIds:participantIds }
-      });
+      postToWix({ type:'CREATE_CHAT', payload:{ type, title, participantIds } });
       closeNewChatModal();
       els.chatTitleInput.value = '';
       state.selectedParticipantIds = [];
@@ -581,95 +554,112 @@
       const data = event.data || {};
 
       if (data.type === 'APPLY_THEME') {
-        applyTheme(data.theme || data.colors || { clubSlug: data.clubSlug || 'default', colorPrimary: data.colorPrimary, colorOnDark: data.colorOnDark, colorNeutral: data.colorNeutral });
-        render();
+        applyTheme(data.theme || data.colors || {
+          clubSlug: data.clubSlug || 'default',
+          colorPrimary: data.colorPrimary,
+          colorOnDark: data.colorOnDark,
+          colorNeutral: data.colorNeutral
+        });
+        return;
       }
 
       if (data.type === 'LOAD_INBOX') {
-        applyTheme(data.theme || data.colors || { clubSlug: data.clubSlug || 'default', colorPrimary: data.colorPrimary, colorOnDark: data.colorOnDark, colorNeutral: data.colorNeutral });
+        applyTheme(data.theme || {
+          clubSlug: data.clubSlug || 'default',
+          colorPrimary: data.colorPrimary,
+          colorOnDark: data.colorOnDark,
+          colorNeutral: data.colorNeutral
+        });
+
         state.memberId = data.memberId || '';
         state.availableMembers = (data.availableMembers || []).map(mapMember);
-        state.threads = (data.chats || []).map(function(chat){
-          return {
-            id: chat._id || chat.id,
+        state.threads = (data.chats || []).map(chat => ({
+          id: chat._id || chat.id,
+          name: chat.title || chat.name || 'Untitled Chat',
+          role: chat.type || 'Direct',
+          initials: initials(chat.title || chat.name || 'C'),
+          online: !!chat.online,
+          lastMessage: chat.lastMessage || ''
+        }));
+        state.activeId = state.threads[0]?.id || '';
+        state.page = 'inbox';
+        render();
+        return;
+      }
+
+      if (data.type === 'LOAD_CHAT') {
+        applyTheme(data.theme || {
+          clubSlug: data.clubSlug || 'default',
+          colorPrimary: data.colorPrimary,
+          colorOnDark: data.colorOnDark,
+          colorNeutral: data.colorNeutral
+        });
+
+        state.memberId = data.memberId || state.memberId;
+        if (Array.isArray(data.availableMembers)) state.availableMembers = data.availableMembers.map(mapMember);
+
+        const chat = data.chat || null;
+        const incomingChatId = (chat && (chat._id || chat.id)) || data.chatId || state.activeId;
+        if (chat) {
+          const normalized = {
+            id: incomingChatId,
             name: chat.title || chat.name || 'Untitled Chat',
             role: chat.type || 'Direct',
             initials: initials(chat.title || chat.name || 'C'),
-            online: !!chat.online
+            online: !!chat.online,
+            lastMessage: chat.lastMessage || ''
           };
-        });
-        if (state.threads[0]) state.activeId = state.threads[0].id;
-        state.page = 'inbox';
+          const idx = state.threads.findIndex(t => t.id === normalized.id);
+          if (idx >= 0) state.threads[idx] = normalized;
+          else state.threads.unshift(normalized);
+        }
+
+        state.activeId = incomingChatId;
+        state.messagesByThread[incomingChatId] = (data.messages || []).map(msg => ({
+          id: msg._id || msg.id || uid(),
+          who: msg.senderId && state.memberId ? (msg.senderId === state.memberId ? 'me' : 'other') : (msg.who || 'other'),
+          text: msg.text || '',
+          ts: msg.createdAt || msg.ts || new Date(),
+          file: msg.fileUrl ? {
+            url: msg.fileUrl,
+            name: msg.fileName || 'Attachment',
+            type: msg.fileType || '',
+            size: msg.fileSize || 0,
+            sizeLabel: msg.fileSize ? formatBytes(msg.fileSize) : '',
+            isImage: String(msg.fileType || '').startsWith('image/')
+          } : (msg.file || null),
+          reply: msg.reply || null
+        }));
+        state.typingUsers = data.typingUsers || {};
+        state.page = 'chat';
         render();
+        return;
       }
 
       if (data.type === 'TYPING_UPDATE') {
         if (data.chatId !== state.activeId) return;
         state.typingUsers = data.typingUsers || {};
         renderTypingIndicator();
-      }
-
-      if (data.type === 'LOAD_CHAT') {
-        applyTheme(data.theme || data.colors || { clubSlug: data.clubSlug || 'default', colorPrimary: data.colorPrimary, colorOnDark: data.colorOnDark, colorNeutral: data.colorNeutral });
-        state.memberId = data.memberId || state.memberId;
-        if (Array.isArray(data.availableMembers)) {
-          state.availableMembers = data.availableMembers.map(mapMember);
-        }
-        const chat = data.chat || null;
-        const chatId = (chat && (chat._id || chat.id)) || data.chatId || state.activeId;
-        if (chat) {
-          const normalized = {
-            id: chatId,
-            name: chat.title || chat.name || 'Untitled Chat',
-            role: chat.type || 'Direct',
-            initials: initials(chat.title || chat.name || 'C'),
-            online: !!chat.online
-          };
-          const idx = state.threads.findIndex(function(t){ return t.id === normalized.id; });
-          if (idx >= 0) state.threads[idx] = normalized; else state.threads.unshift(normalized);
-        }
-        state.activeId = chatId;
-        state.messagesByThread[chatId] = (data.messages || []).map(function(msg){
-          return {
-            id: msg._id || msg.id || uid(),
-            who: msg.senderId && state.memberId ? (msg.senderId === state.memberId ? 'me' : 'other') : (msg.who || 'other'),
-            text: msg.text || '',
-            ts: msg.createdAt || msg.ts || new Date(),
-            file: msg.fileUrl ? {
-              url: msg.fileUrl,
-              name: msg.fileName || 'Attachment',
-              type: msg.fileType || '',
-              size: msg.fileSize || 0,
-              sizeLabel: msg.fileSize ? formatBytes(msg.fileSize) : '',
-              isImage: String(msg.fileType || '').startsWith('image/')
-            } : (msg.file || null),
-            reply: msg.reply || null
-          };
-        });
-        state.typingUsers = data.typingUsers || {};
-        state.page = 'chat';
-        render();
+        return;
       }
 
       if (data.type === 'CHAT_CREATED') {
-        if (Array.isArray(data.availableMembers)) {
-          state.availableMembers = data.availableMembers.map(mapMember);
+        if (Array.isArray(data.availableMembers)) state.availableMembers = data.availableMembers.map(mapMember);
+        if (Array.isArray(data.chats)) {
+          state.threads = data.chats.map(chat => ({
+            id: chat._id || chat.id,
+            name: chat.title || chat.name || 'Untitled Chat',
+            role: chat.type || 'Direct',
+            initials: initials(chat.title || chat.name || 'C'),
+            online: !!chat.online,
+            lastMessage: chat.lastMessage || ''
+          }));
         }
-        const newChatId = data.chatId;
-        if (newChatId) {
-          if (Array.isArray(data.chats)) {
-            state.threads = data.chats.map(function(chat){
-              return {
-                id: chat._id || chat.id,
-                name: chat.title || chat.name || 'Untitled Chat',
-                role: chat.type || 'Direct',
-                initials: initials(chat.title || chat.name || 'C'),
-                online: !!chat.online
-              };
-            });
-          }
-          openThread(newChatId);
-          postToWix({ type:'OPEN_CHAT', chatId:newChatId });
+        if (data.chatId) {
+          openThread(data.chatId);
+          postToWix({ type:'OPEN_CHAT', chatId:data.chatId });
+        } else {
+          render();
         }
       }
     });
@@ -697,15 +687,12 @@
       clearTimeout(typingTimer);
       typingTimer = setTimeout(function(){ sendTyping(false); }, 1500);
     });
-    els.messageInput.addEventListener('keydown', function(e){ if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
-
-    console.assert(typeof uid() === 'string' && uid().length > 0, 'uid should return a non-empty string');
-    console.assert(initials('MDS Coaches') === 'MC', 'initials should derive thread initials');
-    console.assert(formatBytes(1024) === '1.0 KB', 'formatBytes should format KB values');
-    console.assert(buildThemePayload({ colorPrimary:'#112233' }).accent === '#112233'.toUpperCase(), 'theme should map club colorPrimary');
-    console.assert(buildThemePayload({ colorOnDark:'#F5F5F5' }).textColor === '#F5F5F5', 'theme should map colorOnDark');
-    console.assert(buildThemePayload({ colorNeutral:'#222222' }).border === '#222222', 'theme should map colorNeutral');
-    console.assert(Array.isArray(state.selectedParticipantIds), 'selectedParticipantIds should be an array');
+    els.messageInput.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
 
     applyTheme(DEFAULT_THEME);
     render();
