@@ -1,607 +1,572 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  ArrowLeft,
-  Copy,
-  FileText,
-  Image as ImageIcon,
-  MoreVertical,
-  Paperclip,
-  Reply,
-  Search,
-  Send,
-  Smile,
-  X,
-} from "lucide-react";
-
-/* =====================================================
-   PREMIUM NIKE CHAT UI (DARK) - 2 PAGES
-   Pages:
-   - Inbox page (threads list)
-   - Chat page (single thread view)
-
-   Features:
-   - Impact titles
-   - Red accents + icons
-   - Animated message entrance
-   - Hover message actions (reply/copy/react icon)
-   - Reply threading
-   - File + image attachments
-   - Micro-interactions (press + subtle hover scale)
-===================================================== */
-
-const impactTitle = {
-  fontFamily: "Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif",
-  letterSpacing: "0.02em",
-};
-
-const PURPLE = {
-  text: "text-red-500",
-  icon: "text-red-400",
-  iconSoft: "text-red-300",
-  bg: "bg-red-600",
-  bgHover: "hover:bg-red-500",
-  border: "border-red-600",
-};
-
-function cx(...c) {
-  return c.filter(Boolean).join(" ");
-}
-
-function genId() {
-  return Math.random().toString(16).slice(2) + Date.now().toString(16);
-}
-
-function timeLabel(d) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(d);
-}
-
-function formatBytes(bytes = 0) {
-  if (!bytes) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-  const v = bytes / Math.pow(k, i);
-  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
-}
-
-const seededThreads = [
-  {
-    id: "t1",
-    name: "MDS Coaches",
-    role: "Group",
-    initials: "MC",
-    online: true,
-  },
-  {
-    id: "t2",
-    name: "Parent - Amy",
-    role: "Direct",
-    initials: "A",
-    online: false,
-  },
-  {
-    id: "t3",
-    name: "Director - Rick",
-    role: "Direct",
-    initials: "R",
-    online: true,
-  },
-];
-
-function makeSeededMessages() {
-  return {
-    t1: [
-      {
-        id: genId(),
-        who: "other",
-        text: "Nike-dark vibe for the portal? Keep it clean + performance.",
-        ts: new Date(Date.now() - 1000 * 60 * 42),
-      },
-      {
-        id: genId(),
-        who: "me",
-        text: "Yep. Minimal, bold (Impact) + sharp purple accents. Feels fast.",
-        ts: new Date(Date.now() - 1000 * 60 * 40),
-      },
-      {
-        id: genId(),
-        who: "other",
-        text: "Add reply + attachments. Parents will love it.",
-        ts: new Date(Date.now() - 1000 * 60 * 36),
-      },
-    ],
-    t2: [
-      {
-        id: genId(),
-        who: "other",
-        text: "Hey — can you confirm game time again?",
-        ts: new Date(Date.now() - 1000 * 60 * 58),
-      },
-      {
-        id: genId(),
-        who: "me",
-        text: "Yep — I’ll send the full schedule + arrival time now.",
-        ts: new Date(Date.now() - 1000 * 60 * 55),
-      },
-    ],
-    t3: [
-      {
-        id: genId(),
-        who: "other",
-        text: "Can you share the updated 5v5 rotation?",
-        ts: new Date(Date.now() - 1000 * 60 * 15),
-      },
-    ],
-  };
-}
-
-/* ================== ATTACHMENT RENDERERS ================== */
-
-function AttachmentPreview({ file, isMe }) {
-  if (!file) return null;
-
-  if (file.isImage) {
-    return (
-      <div className="space-y-2">
-        <div className={cx("flex items-center gap-2 text-xs", isMe ? "text-white/80" : "text-white/70")}>
-          <ImageIcon className={cx("h-4 w-4", PURPLE.iconSoft)} />
-          <span className="truncate max-w-[240px]">{file.name}</span>
-          <span className="ml-auto opacity-80">{file.sizeLabel}</span>
-        </div>
-        <a
-          href={file.url}
-          target="_blank"
-          rel="noreferrer"
-          className="block overflow-hidden rounded-xl border border-white/10 bg-black/30"
-          title="Open image"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={file.url} alt={file.name} className="max-h-64 w-full object-cover" />
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <a
-      href={file.url}
-      target="_blank"
-      rel="noreferrer"
-      className="group flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2 hover:border-red-500/60 transition"
-      title="Open file"
-    >
-      <div className="h-9 w-9 rounded-xl bg-white/10 grid place-items-center">
-        <FileText className={cx("h-5 w-5", PURPLE.iconSoft)} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">{file.name}</div>
-        <div className="text-xs text-white/60">{file.sizeLabel}</div>
-      </div>
-      <div className={cx("text-xs text-white/60 group-hover:text-red-200")}>Open</div>
-    </a>
-  );
-}
-
-/* ================== BUBBLE ================== */
-
-function Bubble({ msg, onReply }) {
-  const isMe = msg.who === "me";
-  const [hover, setHover] = useState(false);
-
-  return (
-    <div
-      className={cx(
-        "flex w-full transition-all duration-300",
-        isMe ? "justify-end animate-slideInRight" : "justify-start animate-slideInLeft"
-      )}
-    >
-      <div
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        className={cx(
-          "relative max-w-[78%] rounded-2xl px-4 py-3 shadow-md transition-all duration-200",
-          isMe ? `${PURPLE.bg} text-white` : "bg-white/5 text-white border border-white/10",
-          "hover:scale-[1.01]"
-        )}
-      >
-        {msg.reply && (
-          <div className="mb-2 border-l-4 border-red-500 pl-3 text-xs text-white/70">
-            Replying to: {msg.reply.text || (msg.reply.file?.name ? `📎 ${msg.reply.file.name}` : "")}
-          </div>
-        )}
-
-        {msg.file && (
-          <div className={cx("mb-2")}> 
-            <AttachmentPreview file={msg.file} isMe={isMe} />
-          </div>
-        )}
-
-        {msg.text ? <div className="text-[15px] whitespace-pre-wrap">{msg.text}</div> : null}
-
-        <div className={cx("mt-2 flex items-center gap-2 text-[11px]", isMe ? "justify-end text-white/70" : "text-white/50")}>
-          <span>{timeLabel(msg.ts)}</span>
-        </div>
-
-        {/* Hover Actions */}
-        {hover && (
-          <div className="absolute -top-3 right-2 flex gap-2 bg-black/80 backdrop-blur px-2 py-1 rounded-full border border-white/10">
-            <button onClick={() => onReply(msg)} title="Reply">
-              <Reply className={cx("h-4 w-4", PURPLE.icon)} />
-            </button>
-            <button
-              onClick={() => navigator.clipboard.writeText(msg.text || (msg.file?.name ? msg.file.name : ""))}
-              title="Copy"
-            >
-              <Copy className={cx("h-4 w-4", PURPLE.icon)} />
-            </button>
-            <button title="React (UI)">
-              <Smile className={cx("h-4 w-4", PURPLE.icon)} />
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ================== INBOX PAGE ================== */
-
-function InboxPage({ threads, activeId, onOpenThread }) {
-  const [query, setQuery] = useState("");
-
-  const list = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return threads;
-    return threads.filter((t) => t.name.toLowerCase().includes(q));
-  }, [threads, query]);
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between gap-3">
+<!doctype html>
+<!--
+  IMPORTANT:
+  This file must be saved and served as index.html.
+  It is NOT a React/TypeScript file and must not be pasted into index.tsx or App.tsx.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat UI Preview</title>
+  <style>
+    :root{
+      --bg:#050505;
+      --panel:rgba(255,255,255,.05);
+      --border:rgba(255,255,255,.10);
+      --text:#ffffff;
+      --muted:rgba(255,255,255,.62);
+      --red:#dc2626;
+      --red2:#ef4444;
+      --shadow:0 14px 40px rgba(0,0,0,.45);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(239,68,68,.16), transparent 38%),
+        radial-gradient(circle at 80% 40%, rgba(255,255,255,.08), transparent 45%),
+        radial-gradient(circle at 30% 90%, rgba(239,68,68,.10), transparent 55%),
+        linear-gradient(120deg, rgba(255,255,255,.04), transparent 35%, rgba(255,255,255,.03)),
+        var(--bg);
+      color:var(--text);
+      font-family:Arial, Helvetica, sans-serif;
+    }
+    .impact{font-family:Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif; letter-spacing:.02em}
+    .app{max-width:1100px;margin:0 auto;padding:24px;position:relative}
+    .hidden{display:none !important}
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(12px);
+    }
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+    .title{font-size:32px;color:var(--red2)}
+    .subtitle{font-size:12px;color:var(--muted);margin-top:4px}
+    .icon-btn,.send-btn,.attach-btn,.back-btn{
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.08);
+      color:var(--text);
+      border-radius:14px;
+      padding:10px 12px;
+      cursor:pointer;
+      transition:.18s ease;
+    }
+    .icon-btn:hover,.attach-btn:hover,.back-btn:hover{background:rgba(255,255,255,.14);transform:translateY(-1px)}
+    .send-btn{background:var(--red);border-color:var(--red);min-width:56px}
+    .send-btn:hover{background:var(--red2);transform:translateY(-1px)}
+    .send-btn:active,.icon-btn:active,.attach-btn:active,.back-btn:active{transform:scale(.97)}
+    .search-wrap{position:relative}
+    .search{
+      width:100%;
+      background:rgba(0,0,0,.32);
+      border:1px solid var(--border);
+      color:var(--text);
+      border-radius:14px;
+      padding:12px 14px 12px 40px;
+      outline:none;
+    }
+    .search::placeholder,.composer-input::placeholder{color:rgba(255,255,255,.4)}
+    .search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--red2)}
+    .thread-list{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+    .thread{
+      width:100%;text-align:left;padding:14px;border-radius:18px;border:1px solid var(--border);
+      background:transparent;color:var(--text);cursor:pointer;transition:.18s ease;
+    }
+    .thread:hover{background:rgba(255,255,255,.05)}
+    .thread.active{border-color:rgba(220,38,38,.75);background:rgba(255,255,255,.05)}
+    .thread-row{display:flex;align-items:center;gap:12px}
+    .avatar{height:42px;width:42px;border-radius:14px;background:rgba(255,255,255,.10);display:grid;place-items:center;font-weight:700}
+    .thread-main{min-width:0;flex:1}
+    .thread-name{font-size:20px;line-height:1;color:var(--text)}
+    .thread.active .thread-name{color:var(--red2)}
+    .thread-sub{font-size:12px;color:var(--muted);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .online{height:8px;width:8px;border-radius:999px;background:var(--red)}
+    .page-note{font-size:11px;color:rgba(255,255,255,.5);margin-top:14px}
+    .chat-head{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)}
+    .chat-head-main{min-width:0;flex:1}
+    .chat-name{font-size:24px;color:var(--red2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .chat-role{font-size:12px;color:var(--muted);margin-top:4px}
+    .messages{height:62vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+    .row{display:flex;width:100%}
+    .row.me{justify-content:flex-end}
+    .row.other{justify-content:flex-start}
+    .bubble{
+      position:relative;max-width:min(78%,700px);padding:14px 16px;border-radius:20px;box-shadow:var(--shadow);
+      transition:.18s ease;animation:fadeUp .28s ease;
+    }
+    .bubble:hover{transform:scale(1.01)}
+    .bubble.me{background:var(--red);color:#fff}
+    .bubble.other{background:rgba(255,255,255,.05);border:1px solid var(--border);color:#fff}
+    .bubble-time{font-size:11px;margin-top:8px;opacity:.7}
+    .reply-box{margin-bottom:10px;padding-left:10px;border-left:4px solid var(--red2);font-size:12px;color:rgba(255,255,255,.72)}
+    .hover-actions{
+      position:absolute;top:-14px;right:10px;display:none;gap:8px;padding:6px 8px;border-radius:999px;
+      background:rgba(0,0,0,.84);border:1px solid var(--border);backdrop-filter:blur(8px)
+    }
+    .bubble:hover .hover-actions{display:flex}
+    .hover-actions button{background:none;border:none;color:var(--red2);cursor:pointer;padding:0;font-size:14px}
+    .attach-card{
+      display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:rgba(0,0,0,.28);
+      border-radius:14px;padding:10px 12px;margin-bottom:10px;text-decoration:none;color:inherit
+    }
+    .attach-thumb{height:38px;width:38px;border-radius:12px;background:rgba(255,255,255,.10);display:grid;place-items:center;color:var(--red2)}
+    .attach-meta{min-width:0;flex:1}
+    .attach-name{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .attach-size{font-size:12px;color:var(--muted);margin-top:4px}
+    .image-wrap{margin-bottom:10px}
+    .image-top{display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.75);margin-bottom:8px}
+    .image-wrap img{display:block;max-width:100%;max-height:260px;object-fit:cover;border-radius:14px;border:1px solid var(--border)}
+    .composer{border-top:1px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:10px}
+    .reply-preview,.pending-file{
+      display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;border:1px solid var(--border);background:rgba(0,0,0,.28)
+    }
+    .reply-preview-main,.pending-file-main{min-width:0;flex:1}
+    .reply-preview-text,.pending-file-name{font-size:12px;color:rgba(255,255,255,.72);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .reply-line{border-left:4px solid var(--red2);padding-left:10px}
+    .composer-row{display:flex;align-items:center;gap:10px}
+    .composer-input{flex:1;background:rgba(0,0,0,.32);border:1px solid var(--border);color:#fff;border-radius:14px;padding:12px 14px;outline:none}
+    .tip{font-size:11px;color:rgba(255,255,255,.5)}
+    .dev-note{max-width:1100px;margin:10px auto 0;padding:0 24px;color:rgba(255,255,255,.55);font-size:12px}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    @media (max-width: 700px){
+      .app{padding:14px}
+      .title{font-size:28px}
+      .chat-name{font-size:20px}
+      .messages{height:58vh}
+      .bubble{max-width:88%}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section id="inboxPage">
+      <div class="topbar">
         <div>
-          <div className={cx("text-3xl", PURPLE.text)} style={impactTitle}>
-            INBOX
-          </div>
-          <div className="text-xs text-white/60">All previous chats</div>
+          <div class="title impact">INBOX</div>
+          <div class="subtitle">All previous chats</div>
         </div>
-        <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/15 border border-white/10 active:scale-95 transition">
-          <MoreVertical className={cx("h-4 w-4", PURPLE.icon)} />
-        </Button>
+        <button class="icon-btn" title="Menu">⋯</button>
       </div>
 
-      <Card className="mt-4 bg-white/5 border-white/10 backdrop-blur">
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className={cx("absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4", PURPLE.icon)} />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search chats"
-              className="pl-9 bg-black/40 border-white/10 text-white placeholder:text-white/40"
-            />
+      <div class="card" style="padding:16px;">
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input id="searchInput" class="search" placeholder="Search chats" />
+        </div>
+        <div id="threadList" class="thread-list"></div>
+        <div class="page-note">This GitHub file is UI only. Wix sends data into it with postMessage.</div>
+      </div>
+    </section>
+
+    <section id="chatPage" class="hidden">
+      <div class="card">
+        <div class="chat-head">
+          <button id="backBtn" class="back-btn" title="Back">←</button>
+          <div id="chatAvatar" class="avatar">C</div>
+          <div class="chat-head-main">
+            <div id="chatName" class="chat-name impact">Chat</div>
+            <div id="chatRole" class="chat-role">Offline • Direct</div>
           </div>
-
-          <div className="mt-4 space-y-2">
-            {list.map((t) => {
-              const active = t.id === activeId;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => onOpenThread(t.id)}
-                  className={cx(
-                    "w-full text-left rounded-2xl p-3 border transition active:scale-[0.99]",
-                    active
-                      ? "bg-white/5 border-red-600/70 hover:bg-white/8"
-                      : "bg-white/0 border-white/10 hover:bg-white/5"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10 bg-white/10">
-                      <AvatarFallback className="font-bold text-white">{t.initials}</AvatarFallback>
-                    </Avatar>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <div className={cx("truncate", active ? PURPLE.text : "text-white")} style={impactTitle}>
-                          {t.name}
-                        </div>
-                        {t.online && <span className={cx("ml-auto h-2 w-2 rounded-full", PURPLE.bg)} />}
-                      </div>
-                      <div className="truncate text-xs mt-1 text-white/60">Tap to open chat</div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 text-[11px] text-white/50">This is a UI-only preview (no backend).</div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-/* ================== CHAT PAGE ================== */
-
-function ChatPage({ thread, messages, onBack, onSend, onReply, replyTo, clearReply }) {
-  const [draft, setDraft] = useState("");
-  const [pendingFile, setPendingFile] = useState(null);
-
-  const fileInputRef = useRef(null);
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
-
-  function pickFile() {
-    fileInputRef.current?.click();
-  }
-
-  function onFileChosen(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const url = URL.createObjectURL(file);
-    const isImage = file.type?.startsWith("image/");
-
-    setPendingFile({
-      name: file.name,
-      size: file.size,
-      sizeLabel: formatBytes(file.size),
-      type: file.type,
-      isImage,
-      url,
-    });
-
-    e.target.value = "";
-  }
-
-  function clearPendingFile() {
-    if (pendingFile?.url) URL.revokeObjectURL(pendingFile.url);
-    setPendingFile(null);
-  }
-
-  function send() {
-    const text = draft.trim();
-    if (!text && !pendingFile) return;
-
-    onSend({
-      text,
-      file: pendingFile || null,
-    });
-
-    setDraft("");
-    setPendingFile(null);
-    clearReply();
-  }
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <Card className="bg-white/5 border-white/10 backdrop-blur">
-        <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3">
-          <Button
-            variant="secondary"
-            onClick={onBack}
-            className="bg-white/10 text-white hover:bg-white/15 border border-white/10 active:scale-95 transition"
-            title="Back to Inbox"
-          >
-            <ArrowLeft className={cx("h-4 w-4", PURPLE.icon)} />
-          </Button>
-
-          <Avatar className="h-10 w-10 bg-white/10">
-            <AvatarFallback className="font-bold text-white">{thread?.initials || "C"}</AvatarFallback>
-          </Avatar>
-
-          <div className="min-w-0 flex-1">
-            <div className={cx("truncate", PURPLE.text)} style={impactTitle}>
-              {thread?.name || "Chat"}
-            </div>
-            <div className="text-xs text-white/60">
-              {thread?.online ? "Online" : "Offline"} • {thread?.role}
-            </div>
-          </div>
-
-          <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/15 border border-white/10 active:scale-95 transition">
-            <MoreVertical className={cx("h-4 w-4", PURPLE.icon)} />
-          </Button>
+          <button class="icon-btn" title="Menu">⋯</button>
         </div>
 
-        <CardContent className="p-4 space-y-4 h-[62vh] overflow-y-auto">
-          {messages.map((m) => (
-            <Bubble key={m.id} msg={m} onReply={onReply} />
-          ))}
-          <div ref={bottomRef} />
-        </CardContent>
+        <div id="messages" class="messages"></div>
 
-        {/* Composer */}
-        <div className="border-t border-white/10 p-4 space-y-3">
-          {replyTo && (
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-3 py-2">
-              <div className="text-xs border-l-4 border-red-500 pl-3 text-white/70 flex-1 min-w-0">
-                <div className="truncate">Replying to: {replyTo.text || (replyTo.file?.name ? `📎 ${replyTo.file.name}` : "")}</div>
-              </div>
-              <Button
-                variant="secondary"
-                onClick={clearReply}
-                className="bg-white/10 border border-white/10 text-white hover:bg-white/15 active:scale-95 transition"
-                title="Cancel reply"
-              >
-                <X className={cx("h-4 w-4", PURPLE.iconSoft)} />
-              </Button>
+        <div class="composer">
+          <div id="replyPreview" class="reply-preview hidden">
+            <div class="reply-preview-main reply-line">
+              <div id="replyText" class="reply-preview-text">Replying to...</div>
             </div>
-          )}
-
-          {pendingFile && (
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-3 py-2">
-              <div className="h-9 w-9 rounded-xl bg-white/10 grid place-items-center">
-                {pendingFile.isImage ? (
-                  <ImageIcon className={cx("h-5 w-5", PURPLE.iconSoft)} />
-                ) : (
-                  <FileText className={cx("h-5 w-5", PURPLE.iconSoft)} />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm">{pendingFile.name}</div>
-                <div className="text-xs text-white/60">{pendingFile.sizeLabel}</div>
-              </div>
-              <Button
-                variant="secondary"
-                onClick={clearPendingFile}
-                className="bg-white/10 border border-white/10 text-white hover:bg-white/15 active:scale-95 transition"
-                title="Remove attachment"
-              >
-                <X className={cx("h-4 w-4", PURPLE.iconSoft)} />
-              </Button>
-            </div>
-          )}
-
-          <div className="flex gap-2 items-center">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-              className="hidden"
-              onChange={onFileChosen}
-            />
-
-            <Button
-              onClick={pickFile}
-              variant="secondary"
-              className="bg-white/10 border border-white/10 text-white hover:bg-white/15 active:scale-95 transition"
-              title="Attach a file or image"
-            >
-              <Paperclip className={cx("h-4 w-4", PURPLE.iconSoft)} />
-            </Button>
-
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Write a message…"
-              className="bg-black/40 border-white/10 text-white"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-            />
-
-            <Button
-              onClick={send}
-              className={cx(PURPLE.bg, PURPLE.bgHover, "active:scale-95 transition-all")}
-              title="Send"
-            >
-              <Send className="h-4 w-4 text-white" />
-            </Button>
+            <button id="cancelReplyBtn" class="icon-btn" title="Cancel reply">✕</button>
           </div>
 
-          <div className="text-[11px] text-white/50">Attach with the paperclip • Enter to send</div>
+          <div id="pendingFile" class="pending-file hidden">
+            <div id="pendingIcon" class="attach-thumb">📎</div>
+            <div class="pending-file-main">
+              <div id="pendingName" class="pending-file-name">file.pdf</div>
+              <div id="pendingSize" class="attach-size">0 KB</div>
+            </div>
+            <button id="removeFileBtn" class="icon-btn" title="Remove file">✕</button>
+          </div>
+
+          <div class="composer-row">
+            <input id="fileInput" type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" class="hidden" />
+            <button id="attachBtn" class="attach-btn" title="Attach">📎</button>
+            <input id="messageInput" class="composer-input" placeholder="Write a message…" />
+            <button id="sendBtn" class="send-btn" title="Send">➤</button>
+          </div>
+
+          <div class="tip">Attach with the paperclip • Enter to send</div>
         </div>
-      </Card>
-    </div>
-  );
-}
+      </div>
+    </section>
+  </div>
 
-/* ================== APP (2-PAGE STATE ROUTER) ================== */
+  <div class="dev-note">Save this file as <strong>index.html</strong> in your GitHub repo. If you are seeing <strong>/index.tsx: Unexpected token (1:0)</strong>, you are running this HTML file in a React/TypeScript entrypoint instead of serving it as plain HTML.</div>
 
-export default function App() {
-  const [page, setPage] = useState("inbox"); // "inbox" | "chat"
-  const [threads] = useState(seededThreads);
-  const [activeId, setActiveId] = useState(threads[0]?.id || "t1");
-  const [messagesByThread, setMessagesByThread] = useState(() => makeSeededMessages());
-  const [replyTo, setReplyTo] = useState(null);
-
-  const activeThread = useMemo(
-    () => threads.find((t) => t.id === activeId) || threads[0],
-    [threads, activeId]
-  );
-
-  const messages = messagesByThread[activeId] || [];
-
-  function openThread(id) {
-    setActiveId(id);
-    setReplyTo(null);
-    setPage("chat");
-  }
-
-  function backToInbox() {
-    setReplyTo(null);
-    setPage("inbox");
-  }
-
-  function sendToActive({ text, file }) {
-    const myMsg = {
-      id: genId(),
-      who: "me",
-      text,
-      ts: new Date(),
-      reply: replyTo,
-      file: file || null,
+  <script>
+    const state = {
+      memberId: '',
+      page: 'inbox',
+      threads: [
+        { id: 't1', name: 'MDS Coaches', role: 'Group', initials: 'MC', online: true },
+        { id: 't2', name: 'Parent - Amy', role: 'Direct', initials: 'PA', online: false },
+        { id: 't3', name: 'Director - Rick', role: 'Direct', initials: 'DR', online: true }
+      ],
+      activeId: 't1',
+      messagesByThread: {
+        t1: [
+          { id: uid(), who: 'other', text: 'Nike-dark vibe for the portal? Keep it clean + performance.', ts: new Date() },
+          { id: uid(), who: 'me', text: 'Yep. Minimal, bold + sharp red accents. Feels fast.', ts: new Date() },
+          { id: uid(), who: 'other', text: 'Add reply + attachments. Parents will love it.', ts: new Date() }
+        ],
+        t2: [
+          { id: uid(), who: 'other', text: 'Hey - can you confirm game time again?', ts: new Date() },
+          { id: uid(), who: 'me', text: 'Yep - I will send the full schedule + arrival time now.', ts: new Date() }
+        ],
+        t3: [
+          { id: uid(), who: 'other', text: 'Can you share the updated 5v5 rotation?', ts: new Date() }
+        ]
+      },
+      replyTo: null,
+      pendingFile: null
     };
 
-    setMessagesByThread((prev) => ({
-      ...prev,
-      [activeId]: [...(prev[activeId] || []), myMsg],
-    }));
+    const els = {
+      inboxPage: document.getElementById('inboxPage'),
+      chatPage: document.getElementById('chatPage'),
+      threadList: document.getElementById('threadList'),
+      searchInput: document.getElementById('searchInput'),
+      backBtn: document.getElementById('backBtn'),
+      chatAvatar: document.getElementById('chatAvatar'),
+      chatName: document.getElementById('chatName'),
+      chatRole: document.getElementById('chatRole'),
+      messages: document.getElementById('messages'),
+      replyPreview: document.getElementById('replyPreview'),
+      replyText: document.getElementById('replyText'),
+      cancelReplyBtn: document.getElementById('cancelReplyBtn'),
+      pendingFile: document.getElementById('pendingFile'),
+      pendingIcon: document.getElementById('pendingIcon'),
+      pendingName: document.getElementById('pendingName'),
+      pendingSize: document.getElementById('pendingSize'),
+      removeFileBtn: document.getElementById('removeFileBtn'),
+      fileInput: document.getElementById('fileInput'),
+      attachBtn: document.getElementById('attachBtn'),
+      messageInput: document.getElementById('messageInput'),
+      sendBtn: document.getElementById('sendBtn')
+    };
 
-    // fake response for preview
-    setTimeout(() => {
-      const reply = {
-        id: genId(),
-        who: "other",
-        text: file?.isImage ? "Image received." : file ? "File received." : "Got it.",
+    function uid(){
+      return Math.random().toString(16).slice(2) + Date.now().toString(16);
+    }
+    function initials(name){
+      return String(name || 'C').split(' ').map(function(x){ return x[0]; }).slice(0,2).join('').toUpperCase();
+    }
+    function timeLabel(d){
+      try {
+        return new Intl.DateTimeFormat(undefined, { hour:'numeric', minute:'2-digit' }).format(new Date(d));
+      } catch (e) {
+        return '';
+      }
+    }
+    function formatBytes(bytes){
+      if (!bytes) return '0 B';
+      const k = 1024;
+      const sizes = ['B','KB','MB','GB'];
+      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+      const v = bytes / Math.pow(k, i);
+      return (v >= 10 || i === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + sizes[i];
+    }
+    function activeThread(){
+      return state.threads.find(function(t){ return t.id === state.activeId; }) || state.threads[0] || null;
+    }
+    function escapeHtml(str){
+      return String(str == null ? '' : str).replace(/[&<>"']/g, function(s){
+        return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[s];
+      });
+    }
+    function escapeAttr(str){
+      return escapeHtml(str);
+    }
+    function postToWix(data){
+      try { window.parent.postMessage(data, '*'); } catch (e) {}
+    }
+
+    function renderThreads(){
+      const q = (els.searchInput.value || '').trim().toLowerCase();
+      const list = !q ? state.threads : state.threads.filter(function(t){ return (t.name || '').toLowerCase().includes(q); });
+
+      els.threadList.innerHTML = list.map(function(t){
+        return `
+          <button class="thread ${t.id === state.activeId ? 'active' : ''}" data-id="${escapeHtml(t.id)}">
+            <div class="thread-row">
+              <div class="avatar">${escapeHtml(t.initials || initials(t.name))}</div>
+              <div class="thread-main">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div class="thread-name impact">${escapeHtml(t.name || 'Untitled Chat')}</div>
+                  ${t.online ? '<span class="online"></span>' : ''}
+                </div>
+                <div class="thread-sub">Tap to open chat</div>
+              </div>
+            </div>
+          </button>
+        `;
+      }).join('');
+
+      els.threadList.querySelectorAll('.thread').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          const id = btn.getAttribute('data-id');
+          openThread(id);
+          postToWix({ type: 'OPEN_CHAT', chatId: id });
+        });
+      });
+    }
+
+    function renderChatHead(){
+      const t = activeThread();
+      els.chatAvatar.textContent = (t && t.initials) || initials(t && t.name);
+      els.chatName.textContent = (t && t.name) || 'Chat';
+      els.chatRole.textContent = ((t && t.online) ? 'Online' : 'Offline') + ' • ' + ((t && t.role) || 'Direct');
+    }
+
+    function renderFileHtml(file){
+      if (!file) return '';
+      if (file.isImage) {
+        return `
+          <div class="image-wrap">
+            <div class="image-top"><span>🖼</span><span>${escapeHtml(file.name || 'Image')}</span>${file.sizeLabel ? `<span style="margin-left:auto;opacity:.8">${escapeHtml(file.sizeLabel)}</span>` : ''}</div>
+            <a href="${escapeAttr(file.url || '#')}" target="_blank" rel="noreferrer"><img src="${escapeAttr(file.url || '')}" alt="${escapeAttr(file.name || 'Image')}" /></a>
+          </div>
+        `;
+      }
+      return `
+        <a class="attach-card" href="${escapeAttr(file.url || '#')}" target="_blank" rel="noreferrer">
+          <div class="attach-thumb">📄</div>
+          <div class="attach-meta">
+            <div class="attach-name">${escapeHtml(file.name || 'Attachment')}</div>
+            <div class="attach-size">${escapeHtml(file.sizeLabel || '')}</div>
+          </div>
+          <div class="attach-size">Open</div>
+        </a>
+      `;
+    }
+
+    function renderMessages(){
+      const messages = state.messagesByThread[state.activeId] || [];
+      els.messages.innerHTML = messages.map(function(msg){
+        const replyHtml = msg.reply ? `<div class="reply-box">Replying to: ${escapeHtml(msg.reply.text || (msg.reply.file && msg.reply.file.name ? '📎 ' + msg.reply.file.name : ''))}</div>` : '';
+        const fileHtml = renderFileHtml(msg.file || null);
+        return `
+          <div class="row ${msg.who === 'me' ? 'me' : 'other'}">
+            <div class="bubble ${msg.who === 'me' ? 'me' : 'other'}" data-id="${escapeHtml(msg.id)}">
+              <div class="hover-actions">
+                <button data-action="reply" title="Reply">↩</button>
+                <button data-action="copy" title="Copy">⧉</button>
+                <button data-action="react" title="React">☺</button>
+              </div>
+              ${replyHtml}
+              ${fileHtml}
+              ${msg.text ? `<div>${escapeHtml(msg.text)}</div>` : ''}
+              <div class="bubble-time">${escapeHtml(timeLabel(msg.ts))}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      els.messages.querySelectorAll('.bubble').forEach(function(node){
+        const id = node.getAttribute('data-id');
+        const msg = (state.messagesByThread[state.activeId] || []).find(function(m){ return m.id === id; });
+        node.querySelectorAll('[data-action]').forEach(function(btn){
+          btn.addEventListener('click', function(e){
+            e.stopPropagation();
+            const action = btn.getAttribute('data-action');
+            if (action === 'reply') {
+              state.replyTo = msg;
+              renderComposerBits();
+            } else if (action === 'copy') {
+              navigator.clipboard.writeText((msg && msg.text) || (msg && msg.file && msg.file.name) || '');
+            }
+          });
+        });
+      });
+
+      els.messages.scrollTop = els.messages.scrollHeight;
+    }
+
+    function renderComposerBits(){
+      if (state.replyTo) {
+        els.replyPreview.classList.remove('hidden');
+        els.replyText.textContent = 'Replying to: ' + (state.replyTo.text || (state.replyTo.file && state.replyTo.file.name ? '📎 ' + state.replyTo.file.name : ''));
+      } else {
+        els.replyPreview.classList.add('hidden');
+      }
+
+      if (state.pendingFile) {
+        els.pendingFile.classList.remove('hidden');
+        els.pendingName.textContent = state.pendingFile.name || 'Attachment';
+        els.pendingSize.textContent = state.pendingFile.sizeLabel || '';
+        els.pendingIcon.textContent = state.pendingFile.isImage ? '🖼' : '📄';
+      } else {
+        els.pendingFile.classList.add('hidden');
+      }
+    }
+
+    function render(){
+      els.inboxPage.classList.toggle('hidden', state.page !== 'inbox');
+      els.chatPage.classList.toggle('hidden', state.page !== 'chat');
+      renderThreads();
+      renderChatHead();
+      renderMessages();
+      renderComposerBits();
+    }
+
+    function openThread(id){
+      state.activeId = id;
+      state.page = 'chat';
+      state.replyTo = null;
+      render();
+    }
+
+    function backToInbox(){
+      state.page = 'inbox';
+      state.replyTo = null;
+      render();
+    }
+
+    function sendMessage(){
+      const text = (els.messageInput.value || '').trim();
+      if (!text && !state.pendingFile) return;
+
+      const msg = {
+        id: uid(),
+        who: 'me',
+        text: text,
         ts: new Date(),
+        reply: state.replyTo,
+        file: state.pendingFile || null
       };
-      setMessagesByThread((prev) => ({
-        ...prev,
-        [activeId]: [...(prev[activeId] || []), reply],
-      }));
-    }, 900);
-  }
 
-  return (
-    <div className="min-h-screen bg-black text-white p-6">
-      <style>{`
-        @keyframes slideInRight { from {opacity:0; transform:translateX(40px);} to {opacity:1; transform:translateX(0);} }
-        @keyframes slideInLeft { from {opacity:0; transform:translateX(-40px);} to {opacity:1; transform:translateX(0);} }
-        .animate-slideInRight { animation: slideInRight 0.35s ease-out; }
-        .animate-slideInLeft { animation: slideInLeft 0.35s ease-out; }
-      `}</style>
+      state.messagesByThread[state.activeId] = (state.messagesByThread[state.activeId] || []).concat(msg);
+      els.messageInput.value = '';
+      const payloadFile = state.pendingFile ? Object.assign({}, state.pendingFile) : null;
+      state.pendingFile = null;
+      state.replyTo = null;
+      render();
 
-      {/* Nike-like subtle texture */}
-      <div className="pointer-events-none fixed inset-0 opacity-[0.55]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(239,68,68,0.16),transparent_40%),radial-gradient(circle_at_80%_40%,rgba(255,255,255,0.08),transparent_45%),radial-gradient(circle_at_30%_90%,rgba(239,68,68,0.10),transparent_55%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.06),transparent_35%,rgba(255,255,255,0.05))]" />
-      </div>
+      postToWix({
+        type: 'SEND_MESSAGE',
+        payload: {
+          chatId: state.activeId,
+          text: text,
+          fileName: (payloadFile && payloadFile.name) || '',
+          fileUrl: (payloadFile && payloadFile.url) || '',
+          fileType: (payloadFile && payloadFile.type) || '',
+          fileSize: (payloadFile && payloadFile.size) || 0
+        }
+      });
+    }
 
-      <div className="relative">
-        {page === "inbox" ? (
-          <InboxPage threads={threads} activeId={activeId} onOpenThread={openThread} />
-        ) : (
-          <ChatPage
-            thread={activeThread}
-            messages={messages}
-            onBack={backToInbox}
-            onSend={sendToActive}
-            onReply={setReplyTo}
-            replyTo={replyTo}
-            clearReply={() => setReplyTo(null)}
-          />
-        )}
+    window.addEventListener('message', function(event){
+      const data = event.data || {};
 
-        <div className="mt-6 text-xs text-white/40 max-w-4xl mx-auto">
-          Tip: Click a thread in Inbox → you’ll see the chat page.
-        </div>
-      </div>
-    </div>
-  );
-}
+      if (data.type === 'LOAD_INBOX') {
+        state.memberId = data.memberId || '';
+        state.threads = (data.chats || []).map(function(chat){
+          return {
+            id: chat._id || chat.id,
+            name: chat.title || chat.name || 'Untitled Chat',
+            role: chat.type || 'Direct',
+            initials: initials(chat.title || chat.name || 'C'),
+            online: !!chat.online
+          };
+        });
+        if (state.threads[0]) state.activeId = state.threads[0].id;
+        state.page = 'inbox';
+        render();
+      }
+
+      if (data.type === 'LOAD_CHAT') {
+        state.memberId = data.memberId || state.memberId;
+        const chat = data.chat || null;
+        const chatId = (chat && (chat._id || chat.id)) || data.chatId || state.activeId;
+
+        if (chat) {
+          const normalized = {
+            id: chatId,
+            name: chat.title || chat.name || 'Untitled Chat',
+            role: chat.type || 'Direct',
+            initials: initials(chat.title || chat.name || 'C'),
+            online: !!chat.online
+          };
+          const idx = state.threads.findIndex(function(t){ return t.id === normalized.id; });
+          if (idx >= 0) state.threads[idx] = normalized;
+          else state.threads.unshift(normalized);
+        }
+
+        state.activeId = chatId;
+        state.messagesByThread[chatId] = (data.messages || []).map(function(msg){
+          return {
+            id: msg._id || msg.id || uid(),
+            who: msg.senderId && state.memberId ? (msg.senderId === state.memberId ? 'me' : 'other') : (msg.who || 'other'),
+            text: msg.text || '',
+            ts: msg.createdAt || msg.ts || new Date(),
+            file: msg.fileUrl ? {
+              url: msg.fileUrl,
+              name: msg.fileName || 'Attachment',
+              type: msg.fileType || '',
+              size: msg.fileSize || 0,
+              sizeLabel: msg.fileSize ? formatBytes(msg.fileSize) : '',
+              isImage: String(msg.fileType || '').startsWith('image/')
+            } : (msg.file || null),
+            reply: msg.reply || null
+          };
+        });
+        state.page = 'chat';
+        render();
+      }
+    });
+
+    els.searchInput.addEventListener('input', renderThreads);
+    els.backBtn.addEventListener('click', backToInbox);
+    els.cancelReplyBtn.addEventListener('click', function(){ state.replyTo = null; renderComposerBits(); });
+    els.attachBtn.addEventListener('click', function(){ els.fileInput.click(); });
+    els.removeFileBtn.addEventListener('click', function(){ state.pendingFile = null; renderComposerBits(); });
+    els.fileInput.addEventListener('change', function(e){
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      state.pendingFile = {
+        name: file.name,
+        size: file.size,
+        sizeLabel: formatBytes(file.size),
+        type: file.type,
+        isImage: String(file.type || '').startsWith('image/'),
+        url: url
+      };
+      e.target.value = '';
+      renderComposerBits();
+    });
+    els.sendBtn.addEventListener('click', sendMessage);
+    els.messageInput.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Browser self-checks.
+    console.assert(typeof uid() === 'string' && uid().length > 0, 'uid should return a non-empty string');
+    console.assert(initials('MDS Coaches') === 'MC', 'initials should derive thread initials');
+    console.assert(formatBytes(1024) === '1.0 KB', 'formatBytes should format KB values');
+    console.assert(escapeHtml('<script>') === '&lt;script&gt;', 'escapeHtml should escape angle brackets');
+    console.assert(timeLabel(new Date()).length > 0, 'timeLabel should return text for valid dates');
+    console.assert(Array.isArray(state.threads), 'threads should be an array');
+
+    render();
+  </script>
+</body>
+</html>
