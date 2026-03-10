@@ -596,6 +596,17 @@
         });
 
         state.memberId = data.memberId || state.memberId;
+        // UPDATE INBOX THREAD LIST
+if (Array.isArray(data.chats)) {
+  state.threads = data.chats.map(chat => ({
+    id: chat._id || chat.id,
+    name: chat.title || chat.name || 'Untitled Chat',
+    role: chat.type || 'Direct',
+    initials: initials(chat.title || chat.name || 'C'),
+    online: !!chat.online,
+    lastMessage: chat.lastMessage || ''
+  }));
+}
         if (Array.isArray(data.availableMembers)) state.availableMembers = data.availableMembers.map(mapMember);
 
         const chat = data.chat || null;
